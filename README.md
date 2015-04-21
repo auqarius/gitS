@@ -54,4 +54,7 @@
 * git config --global alias.st status // 将git status 命令替换为git st
 * git config --global alias.last 'log -1' // 配置一个 git last 让其显示最后一次提交的信息
 * git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit" // 格式化log
+* git checkout --ours logo.png //checkout 自己的文件，用在二进制文件冲突的时候
+* git checokout --theirs logo.png //checkout 别人的文件，用在二进制文件冲突的时候
+* git checkout branch2 logo.png // 也可以直接checkout某一个分支的某个文件
 * END
