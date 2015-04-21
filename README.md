@@ -54,4 +54,4 @@
 * git config --global alias.st status // 将git status 命令替换为git st
 * git config --global alias.last 'log -1' // 配置一个 git last 让其显示最后一次提交的信息
 * git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit" // 格式化log
-* 
+* END
