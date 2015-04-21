@@ -1,6 +1,6 @@
-＃cocoaPods Skill
+#cocoaPods Skill
 
-** cocoaPods commands list**
+**cocoaPods commands list**
 
 ##OverView
 
