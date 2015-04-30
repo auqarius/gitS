@@ -50,7 +50,7 @@
 * $ git tag -d v1.0 // 删除标签
 * $ git push origin v1.0 // 将标签推送到远程库
 * $ git push origin --tags // 推送所有标签到远程库
-* $ git oush origin :refs/tags/v1.0 // 在远程库删除tag，但是得要在本地库线删除
+* $ git push origin :refs/tags/v1.0 // 在远程库删除tag，但是得要在本地库线删除
 * git config --global alias.st status // 将git status 命令替换为git st
 * git config --global alias.last 'log -1' // 配置一个 git last 让其显示最后一次提交的信息
 * git config --global alias.lg "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit" // 格式化log
