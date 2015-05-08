@@ -1,4 +1,4 @@
-#RectiveCocoa
+#ReactiveCocoa
 
 ## kvo
 
