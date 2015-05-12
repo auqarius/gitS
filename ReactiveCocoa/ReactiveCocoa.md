@@ -1,10 +1,10 @@
 
 #ReactiveCocoa
 @(iOS学习笔记)[翻译]
-> 其他资料：`希望你优先查看其他资料`
-> 1. 简介：[ReactiveCocoa in NSHipster][1]
-> 2. 概念1： [ReactiveCocoa与Functional Reactive Programming][4]
-> 3. 概念2：[说说ReactiveCocoa 2][5]
+> 其他资料：`希望你优先查看其他资料`<br>
+> 1. 简介：[ReactiveCocoa in NSHipster][1]<br>
+> 2. 概念1： [ReactiveCocoa与Functional Reactive Programming][4]<br>
+> 3. 概念2：[说说ReactiveCocoa 2][5]<br>
 > 4. 实战：[ReactiveCocoa2实战][6]
 
 **目录**
