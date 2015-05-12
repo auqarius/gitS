@@ -5,7 +5,7 @@
 > 1. 简介：[ReactiveCocoa in NSHipster][1]<br>
 > 2. 概念1： [ReactiveCocoa与Functional Reactive Programming][4]<br>
 > 3. 概念2：[说说ReactiveCocoa 2][5]<br>
-> 4. 实战：[ReactiveCocoa2实战][6]`不得不说，这一篇非常有用，但是也必须是在看过了前三篇的情况下。`
+> 4. 实战：[ReactiveCocoa2实战][6]`不得不说，这一篇非常有用，但是也必须是在看过了前三篇的情况下。`<br>
 > 5. 强化：[ReactiveCocoaBasic Operators基本操作][7] 
 
 **目录**
