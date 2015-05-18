@@ -6,7 +6,8 @@
 > 2. 概念1： [ReactiveCocoa与Functional Reactive Programming][4]<br>
 > 3. 概念2：[说说ReactiveCocoa 2][5]<br>
 > 4. 实战：[ReactiveCocoa2实战][6]`不得不说，这一篇非常有用，但是也必须是在看过了前三篇的情况下。`<br>
-> 5. 强化：[ReactiveCocoaBasic Operators基本操作][7] 
+> 5. 强化：[ReactiveCocoaBasic Operators基本操作][7] <br>
+> 6. 南峰子: [Reactive Cocoa][8]<br>
 
 **目录**
 
@@ -133,3 +134,4 @@ deliverOn:RACScheduler.mainThreadScheduler];
 [5]:http://limboy.me/ios/2013/12/27/reactivecocoa-2.html
 [6]:http://limboy.me/ios/2014/06/06/deep-into-reactivecocoa2.html
 [7]:http://segmentfault.com/a/1190000000408492
+[8]:http://southpeak.github.io/blog/categories/reactivecocoa/
