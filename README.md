@@ -58,3 +58,23 @@
 * git checokout --theirs logo.png //checkout 别人的文件，用在二进制文件冲突的时候
 * git checkout branch2 logo.png // 也可以直接checkout某一个分支的某个文件
 * END
+
+
+
+
+**下面是git进阶的一些东西**
+
+>  [Git 常用命令 ][1]
+
+
+
+
+
+
+
+
+
+
+
+
+[1]:http://liujin.me/blog/2015/05/25/Git-%E5%B8%B8%E7%94%A8%E5%91%BD%E4%BB%A4/
