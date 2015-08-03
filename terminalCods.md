@@ -15,3 +15,17 @@ alias ox="open ./*.xcworkspace 2>/dev/null || open ./*.xcodeproj 2>/dev/null"
 alias ded="rm -rf $HOME/Library/Developer/Xcode/DerivedData"
 # 在当前目录开一个web服务
 alias www="twistd -onl - --pidfile=/tmp/twistd.pid web --path=./ --port=8000;"
+# 打开xcode
+/Applications/Xcode.app/Contents/MacOS/Xcode </dev/null &>/dev/null &
+如果你使用了 fish 那么后面的一段可以不要:
+/Applications/Xcode.app/Contents/MacOS/Xcode
+
+# CocoaPods 安装有问题
+$ mkdir -p $HOME/Software/ruby
+$ export GEM_HOME=$HOME/Software/ruby
+$ gem install cocoapods
+[...]
+1 gem installed
+$ export PATH=$PATH:$HOME/Sofware/ruby/bin
+$ pod --version
+0.37.2
