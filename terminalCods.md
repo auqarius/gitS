@@ -26,6 +26,6 @@ $ export GEM_HOME=$HOME/Software/ruby
 $ gem install cocoapods
 [...]
 1 gem installed
-$ export PATH=$PATH:$HOME/Sofware/ruby/bin
+$ export PATH $PATH:$HOME/Sofware/ruby/bin
 $ pod --version
 0.37.2
