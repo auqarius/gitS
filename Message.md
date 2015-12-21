@@ -1,5 +1,7 @@
 # 消息
 
+#### 这篇文章其实可以算是我的笔记，因为很多地方和原文章都很像。主要是为了让自己理解，如果你觉得会看不懂，可以建议看看[原文][原文连接]
+
 在 Objective-C Runtime 基础里面，是从发送一个消息展开的，那发送一个消息（在 OC 中是调用一个方法）的过程到底是怎样的，还是要先从 objc_msgSend 函数说起，
 
 ## objc_msgSend 函数
@@ -148,8 +150,22 @@ forwardInvocation: 方法是从 NSObject 继承下来的，但是 NSObject 只�
 当然你也可以重写 respondsToSelector: 方法来让它返回 YES。
 
 
+## 结语
 
+其实消息发送和转发是一个非常容易想明白的东西，整个过程大概如下：
 
+1. 筛选消息，确定有问题的消息不发送 
+2. 查询自己刚才用过的
+3. 查询自己有的
+4. 查询超类有的
+5. 给程序员个机会，看是不是要在这个时候动态添加一个方法来处理
+6. 再给程序员一个机会，看看是不是要换一个类来处理
+7. 看看本类中有没有写好需要换一个类来处理
+8. 看看超类中是不是有确定要换一个类来处理
+9. crash
 
+后面将会涉及到 Method Swizzling，来处理当你不能修改某个类的方法的实现的时候该怎么修改这个类的转发逻辑。
+
+[原文连接]: http://yulingtianxia.com/blog/2014/11/05/objective-c-runtime/
 [1]:https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
 [消息转发图片]:http://7ni3rk.com1.z0.glb.clouddn.com/QQ20141113-1@2x.png?imageView2/2/w/800/q/75|watermark/2/text/eXVsaW5ndGlhbnhpYQ==/font/Y29taWMgc2FucyBtcw==/fontsize/500/fill/I0VGRUZFRg==/dissolve/100/gravity/SouthEast/dx/10/dy/10
