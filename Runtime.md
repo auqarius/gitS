@@ -15,7 +15,7 @@
 	
 会被转换为: 
 
-	objc_msgSend(NSString, stringWithFormat, @"a")
+	objc_msgSend(NSString, @selector("stringWithFormat"), @"a")
 	
 
 ## objc_msgSend
