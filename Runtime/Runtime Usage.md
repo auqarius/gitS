@@ -280,8 +280,11 @@
 		class_addMethod([self class], setterSel, setterImp, types);
  
  
- 以上就是了
-  
+ 以上就是第二个例子的说明了。代码我放在了[这里][2]。可以直接使用，建议写一个 category 比较好。
+ 
+## 结语
+
+说实话 Runtime 确实不太容易理解，即是我看了这么久，也深入了解了这么多例子，还是觉得摸不着头脑。所以后面应该还有一个例子。 反正就是，不懂就使劲的钻研呗。 
   
 [strstr]:	http://baike.baidu.com/view/745156.htm
 [strdup]: http://baike.baidu.com/view/1028541.htm
@@ -289,3 +292,4 @@
 [1]: https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtPropertyIntrospection.html#//apple_ref/doc/uid/TP40008048-CH101-SW1
 [asprintf]: http://baike.baidu.com/view/8507235.htm
 [toupper]: http://baike.baidu.com/view/1081141.htm
+[2]: https://github.com/auqarius/gitS/tree/master/Runtime/RuntimeUsageCode
