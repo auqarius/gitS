@@ -21,10 +21,10 @@
 编译器会根据情况在以下几中方法中选择方法调用：
 
 * objc_msgSend：本类调用，返回值为简单值。
-* objc_msgSend_stret：本类调用，返回值为结构体。
+* objc\_msgSend_stret：本类调用，返回值为结构体。
 * objc_msgSendSuper: 超类调用，返回值为简单值。
-* objc_msgSendSuper_stret: 超类调用，返回值为结构体。
-* objc_msgSend_fpret: **特别的：在 i386 平台处理返回类型为浮点数的时候使用。**
+* objc\_msgSendSuper_stret: 超类调用，返回值为结构体。
+* objc\_msgSend_fpret: **特别的：在 i386 平台处理返回类型为浮点数的时候使用。**
 
 PS: stret = **st**ruct + **ret**urn; fpret = **f**loating-**p**oint **ret**urn
 
