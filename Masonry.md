@@ -141,8 +141,7 @@ Masonry 主要的类结构有：
 这个类是一个非常标准的抽象类，将基础的数据全部处理掉，然后在 MASConstraint+Private.h 中使用分类 MASConstraint (Abstract) 和一个匿名分类来声明几个基类和子类都将使用到的方法，并且在这里声明代理和代理方法。这一段很有意思，对于开发者来说应该能提供很多灵感。使用分类和协议，能帮你减少很多代码。
   
  这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
-  
-
+ 
 ~~~ Objective - C
 
 // MASConstraint.h
@@ -155,7 +154,8 @@ Masonry 主要的类结构有：
 - (MASConstraint * (^)(id attr))equalTo;
    
 ~~~
- 看了就比较明白了，其实它就是将 block 作为返回值，而这个 block 的返回值就是 `MASConstraint` 自己，这样可以继续使用点语法操作其他内容，看看实现：
+
+看了就比较明白了，其实它就是将 block 作为返回值，而这个 block 的返回值就是 `MASConstraint` 自己，这样可以继续使用点语法操作其他内容，看看实现：
   
 ~~~ Objective - C
   
