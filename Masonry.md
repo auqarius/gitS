@@ -41,11 +41,11 @@ Masonry 的 Github 地址：[https://github.com/Masonry/Masonry](https://github.
 
 看注释里面的，这段代码最终的结果是：
 
- ~~~ Objective-C
+~~~ Objective-C
  
 view1.attr1 = view2.attr2 * multiplier + constant
  
- ~~~
+~~~
 
 再来看它的使用：
  
@@ -140,7 +140,7 @@ Masonry 主要的类结构有：
 
 这个类是一个非常标准的抽象类，将基础的数据全部处理掉，然后在 MASConstraint+Private.h 中使用分类 MASConstraint (Abstract) 和一个匿名分类来声明几个基类和子类都将使用到的方法，并且在这里声明代理和代理方法。这一段很有意思，对于开发者来说应该能提供很多灵感。使用分类和协议，能帮你减少很多代码。
   
- 这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
+这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
  
 ~~~ Objective - C
 
@@ -167,22 +167,22 @@ Masonry 主要的类结构有：
   
 ~~~
  
- 在这里，`- (MASConstraint * (^)(id, NSLayoutRelation))equalToWithRelation` 这个方法只是一个抽象的声明而已，因为在 MASConstraint 里面没有涉及到任何的 UIView，因此这些只是概念，具体的实现还是要到 [MASViewConstraint](#MASViewConstraint-ClassRef) 里面。
+在这里，`- (MASConstraint * (^)(id, NSLayoutRelation))equalToWithRelation` 这个方法只是一个抽象的声明而已，因为在 MASConstraint 里面没有涉及到任何的 UIView，因此这些只是概念，具体的实现还是要到 [MASViewConstraint](#MASViewConstraint-ClassRef) 里面。
   
 **同理：**
   
- ~~~ Objective - C
+~~~ Objective - C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
  
- ~~~
+~~~
 
 等等，也是如此的做法。
   
 ### <a name="MASViewConstraint-ClassRef"></a>MASViewConstraint : MASConstraint
   
- 当基础类搞定，只能在抽象的意义上设定 view 的 top、left、right、bottom，并没有涉及到具体的 view。在这里就将来完成这一步。对于 NSLayoutConstraint 的生成方法，view 是有顺序的，而且在 NSLayoutConstraint 的属性中，也有 firstItem 、firstAttribute、secondItem、secondAttribute。因此我们也需要这样的东西。不过 Masonry 并没有这么做，它新创建了一个类，叫 [MASViewAttribute](#MASViewAttribute-ClassRef) ，负责将 view 和 attribute 绑定在一起。于是就有了如下属性：
+当基础类搞定，只能在抽象的意义上设定 view 的 top、left、right、bottom，并没有涉及到具体的 view。在这里就将来完成这一步。对于 NSLayoutConstraint 的生成方法，view 是有顺序的，而且在 NSLayoutConstraint 的属性中，也有 firstItem 、firstAttribute、secondItem、secondAttribute。因此我们也需要这样的东西。不过 Masonry 并没有这么做，它新创建了一个类，叫 [MASViewAttribute](#MASViewAttribute-ClassRef) ，负责将 view 和 attribute 绑定在一起。于是就有了如下属性：
   
   * 第一个视图和它的约束 firstViewAttribute ( [MASViewAttribute](#MASViewAttribute-ClassRef)) 
 
@@ -190,7 +190,7 @@ Masonry 主要的类结构有：
 
 然后再配一个如下的初始化方法：
   
- ~~~ Objective - C
+~~~ Objective - C
  
 // MASViewConstraint.h
  
@@ -203,15 +203,16 @@ Masonry 主要的类结构有：
 **/
 - (id)initWithFirstViewAttribute:(MASViewAttribute *)firstViewAttribute;
  
- ~~~
+~~~
  
 还记得我们当初的设想么？
  
- ~~~ Objective - C
+~~~ Objective - C
  
 view1.top = superView.top * 1.0 + 10;
  
- ~~~
+~~~
+
 看看目前为止的代码执行是不是能满足这个要求了：
   
   1. 使用初始化方法，将 view1.top 整合成 MASViewAttribute 类型的实例，并赋值给 firstViewAttribute 属性
@@ -228,7 +229,7 @@ view1.top = superView.top * 1.0 + 10;
   
 这里最重要的实现，就是将 [MASConstraint](#MASConstraint-ClassRef) 里面定义的一些抽象方法具体实现，因为在这里已经有 view、superView 和对应的 NSLayoutConstraint。现在我们可以看看  [MASConstraint](#MASConstraint-ClassRef) 中 `- (MASConstraint * (^)(id, NSLayoutRelation))equalToWithRelation` 是怎么实现的了:
   
-   ~~~ Objective-C
+~~~ Objective-C
    
 - (MASConstraint * (^)(id, NSLayoutRelation))equalToWithRelation {
 return ^id(id attribute, NSLayoutRelation relation) {
@@ -255,21 +256,20 @@ return ^id(id attribute, NSLayoutRelation relation) {
 	};
 }
    
-   ~~~
+~~~
  
 `if` 里面的内容是批量添加的代码，目前来说不是重点。重点看 `else` 里面的内容，其实很简单，只是记录一下。 `self.layoutRelation` 就是 `NSLayoutRelation` 类型的，在 `view1.top = superView.top * 1.0 + 10` 里面负责的是 `=` 的部分，当然也可以是 `>=` 或者 `<=`。
    
 **同理：**
   
- ~~~ Objective - C
+~~~ Objective - C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
  
- ~~~
+~~~
 
 等等，也是如此的做法。
-	
 	
 offset() 是控制偏移量的，对应的内容是 `+10`，它最终的设置的是 self.layoutConstant。
   
@@ -288,7 +288,7 @@ multipliedBy() 是控制倍数的，对应的内容是 `1.0`，它最终的设�
 
 **有了以上这些，我们就可以设置一个视图的某一条约束了：**
   
-  ~~~ Objective - C
+~~~ Objective - C
   
 MASViewAttribute *viewAttribute = [[MASViewAttribute alloc] initWithView:view1 layoutAttribute:NSLayoutAttributeTop];
 MASViewConstraint *newConstraint = [[MASViewConstraint alloc] initWithFirstViewAttribute:viewAttribute];
@@ -296,20 +296,19 @@ MASViewConstraint *newConstraint = [[MASViewConstraint alloc] initWithFirstViewA
 // 先忽略 superView.top 的问题，后面会讲
 newConstraint.equalTo(superView.top).offset(10). multipliedBy(1.0);
   
-  ~~~
+~~~
   
-  这样已经方便很多了，但是依然需要创建  `MASViewAttribute` 和 `MASViewConstraint ` 这两个东西，如果我们有一个类来维护这些东西，那就更方便了，于是就有了 [MASConstraintMaker](#MASConstraintMaker-ClassRef)。
+这样已经方便很多了，但是依然需要创建  `MASViewAttribute` 和 `MASViewConstraint ` 这两个东西，如果我们有一个类来维护这些东西，那就更方便了，于是就有了 [MASConstraintMaker](#MASConstraintMaker-ClassRef)。
 
 	
 ### <a name="MASConstraintMaker-ClassRef"></a>MASConstraintMaker : NSObject
   
-  按照我们的想法，上面的几个类已经可以完成我们想要的了，但是问题是，这样依然不能做到简化语法的目的。
+按照我们的想法，上面的几个类已经可以完成我们想要的了，但是问题是，这样依然不能做到简化语法的目的。
   
-  Masonry 最关键的地方在于这个类，它保存一个主视图 view1，然后针对这个主视图，使用一个 NSArray 来统一管理 MASViewConstraint。
+Masonry 最关键的地方在于这个类，它保存一个主视图 view1，然后针对这个主视图，使用一个 NSArray 来统一管理 MASViewConstraint。
   
-  这样，我们初始化一个 MASConstraintMaker 类，并赋值一个 view，然后添加其他约束就可以了。因此需要将 view 的基础约束添加成属性来调用：
- 
- 
+这样，我们初始化一个 MASConstraintMaker 类，并赋值一个 view，然后添加其他约束就可以了。因此需要将 view 的基础约束添加成属性来调用：
+
 ~~~ Objective-C
   
 // MASConstraintMaker.h
@@ -335,7 +334,7 @@ newConstraint.equalTo(superView.top).offset(10). multipliedBy(1.0);
  	
 ~~~ Objective-C
  	
- // MASConstraintMaker.m
+// MASConstraintMaker.m
  	
 - (MASConstraint *)left {
 	return [self addConstraintWithLayoutAttribute:NSLayoutAttributeLeft];
