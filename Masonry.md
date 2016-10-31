@@ -142,6 +142,7 @@ Masonry 主要的类结构有：
   
  这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
   
+
 ~~~ Objective - C
 
 // MASConstraint.h
