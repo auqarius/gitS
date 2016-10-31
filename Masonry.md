@@ -143,7 +143,7 @@ Masonry 主要的类结构有：
  这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
   
 ~~~ Objective - C
-  
+
 // MASConstraint.h
 /**
  *	Sets the constraint relation to NSLayoutRelationEqual
@@ -152,10 +152,9 @@ Masonry 主要的类结构有：
  *  see readme for more details.
  */
 - (MASConstraint * (^)(id attr))equalTo;
-  
+   
 ~~~
-  
-看了就比较明白了，其实它就是将 block 作为返回值，而这个 block 的返回值就是 `MASConstraint` 自己，这样可以继续使用点语法操作其他内容，看看实现：
+ 看了就比较明白了，其实它就是将 block 作为返回值，而这个 block 的返回值就是 `MASConstraint` 自己，这样可以继续使用点语法操作其他内容，看看实现：
   
 ~~~ Objective - C
   
@@ -171,7 +170,7 @@ Masonry 主要的类结构有：
   
 **同理：**
   
-~~~ Objective - C
+ ~~~ Objective - C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
