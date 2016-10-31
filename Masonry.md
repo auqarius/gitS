@@ -522,5 +522,5 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
 
 [VFL（Visual Format Language)](http://www.cocoachina.com/ios/20141209/10549.html) 是官方出的简化版，不过真的很难用，而且代码写起来一点都不优雅。
 
-最后，这里还有一篇[解读 Masonry ](http://www.cnblogs.com/ludashi/p/5591572.html)的文章，写的很好，提供了一个类导图，可以让你更加清除整个 Masonry 的结构。
+最后，这里还有一篇[解读 Masonry ](http://www.cnblogs.com/ludashi/p/5591572.html)的文章，写的很好，提供了一个类导图，可以让你更加清楚整个 Masonry 的结构。
 	

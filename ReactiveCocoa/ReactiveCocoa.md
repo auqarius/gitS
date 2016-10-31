@@ -14,7 +14,6 @@
 [TOC]
 
 ## kvo代替
----------
 
 ```  
 // 当self.username改变，都会输出一遍。  
@@ -23,7 +22,6 @@ NSLog(@"%@", newName);
 }];
 ```
 ## 带条件的kvo
----------
 
 ```
 // 当self.username改变，如果名字是以j开头的，则输出名字，否则不输出。 
@@ -33,7 +31,6 @@ NSLog(@"%@", newName);
 }];
 ```
 ## RAC条件控制
----------
 
 ```
 // 方法+combineLatest:reduce: 可以接收一个数组的信号，在这里creatEnabled 的真假是由self.password和self.passwordConfirmation是否一样来控制的。
@@ -42,7 +39,6 @@ return @([passwordConfirm isEqualToString:password]);}];
 ```
 
 ## button的点击事件
----------
 
 ```
 // 可以监控button的点击事件。	
@@ -52,7 +48,6 @@ return [RACSignal empty];
 }];
 ```
 ## 异步网络请求
----------
 
 ```
 // 可以自定一个事件(RACCommand),例如self.loginCommand,然后将事件调用的代码写在block里面。
@@ -75,7 +70,6 @@ self.loginButton.rac_command = self.loginCommand;
 <i class="icon-file"></i> **signals 可以代表timers、大部分的UI事件、或者其他的总是在变的东西**
 
 ## 信号的多个异步事件监控
----------
 
 ```
 // 当[client fetchUserRepos], [client fetchOrgRepos]均返回信号才会执行log
@@ -85,7 +79,6 @@ NSLog(@"They're both done!");
 ```
 
 ## 多个异步信号顺序执行
----------
 
 ```
 // 登陆后然后缓存用户信息
@@ -105,7 +98,6 @@ NSLog(@"Fetched all messages.");
 ```
 
 ##RAC绑定异步执行结果
----------
 
 ```
 // 创建一个单项绑定，这样就可以在用户登录的第一时间设置用户的头像到self.imageView.image，fetchUserWithUsername方法返回一个用户的signal。deliverOn方法创建一个新的signal到其他的线程工作。map将会在每一次fetchUserWithUsername返回信息的时候执行一遍block。
@@ -118,7 +110,7 @@ deliverOn:RACScheduler.mainThreadScheduler];
 ```
 
 
-> 上面的例子只能展示出这个东西到底能干什么，但是不能表明出它的强大支出。
+> 上面的例子只能展示出这个东西到底能干什么，但是不能表明出它的强大之出。
 > 如果需要更多的示例代码，请查看[C-41][2]这个项目。
 > [更多RAC的文档][3]
 
