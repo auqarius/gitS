@@ -141,8 +141,8 @@ Masonry 主要的类结构有：
 这个类是一个非常标准的抽象类，将基础的数据全部处理掉，然后在 MASConstraint+Private.h 中使用分类 MASConstraint (Abstract) 和一个匿名分类来声明几个基类和子类都将使用到的方法，并且在这里声明代理和代理方法。这一段很有意思，对于开发者来说应该能提供很多灵感。使用分类和协议，能帮你减少很多代码。
   
 这里是链式语法的比较关键的一步，就是 `view.top.equalTo(superView.top)` 的 eauqlTo()，我们先看看它是如何定义的：
- 
-~~~ Objective - C
+
+~~~ Objective-C
 
 // MASConstraint.h
 /**
@@ -157,7 +157,7 @@ Masonry 主要的类结构有：
 
 看了就比较明白了，其实它就是将 block 作为返回值，而这个 block 的返回值就是 `MASConstraint` 自己，这样可以继续使用点语法操作其他内容，看看实现：
   
-~~~ Objective - C
+~~~ Objective-C
   
 - (MASConstraint * (^)(id))equalTo {
 	return ^id(id attribute) {
@@ -171,7 +171,7 @@ Masonry 主要的类结构有：
   
 **同理：**
   
-~~~ Objective - C
+~~~ Objective-C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
@@ -190,7 +190,7 @@ Masonry 主要的类结构有：
 
 然后再配一个如下的初始化方法：
   
-~~~ Objective - C
+~~~ Objective-C
  
 // MASViewConstraint.h
  
@@ -207,7 +207,7 @@ Masonry 主要的类结构有：
  
 还记得我们当初的设想么？
  
-~~~ Objective - C
+~~~ Objective-C
  
 view1.top = superView.top * 1.0 + 10;
  
@@ -262,7 +262,7 @@ return ^id(id attribute, NSLayoutRelation relation) {
    
 **同理：**
   
-~~~ Objective - C
+~~~ Objective-C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
@@ -288,7 +288,7 @@ multipliedBy() 是控制倍数的，对应的内容是 `1.0`，它最终的设�
 
 **有了以上这些，我们就可以设置一个视图的某一条约束了：**
   
-~~~ Objective - C
+~~~ Objective-C
   
 MASViewAttribute *viewAttribute = [[MASViewAttribute alloc] initWithView:view1 layoutAttribute:NSLayoutAttributeTop];
 MASViewConstraint *newConstraint = [[MASViewConstraint alloc] initWithFirstViewAttribute:viewAttribute];
@@ -385,7 +385,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
  
 上面的内容中，有一个关键的点，`superView.top` 是从哪里来的？UIView 并没有这样的属性。于是我们需要创建一个 UIView 的分类，给它添加几个属性：
  	
-~~~ Objective - C
+~~~ Objective-C
  	
 //  View+MASAdditions.h
  
@@ -412,7 +412,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
 
 我们连  MASConstraintMaker 都不希望在使用的时候自己创建，于是需要给 UIView 添加这么一个方法：
  	
-~~~ Objective - C
+~~~ Objective-C
  	
 //  View+MASAdditions.h
  	
@@ -430,7 +430,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
  
 这就是我们经常使用的那个方法，为了在给一个 view 添加约束的时候看起来整体性更加强，Masonry 将所有的添加约束方法放在了 block 里面进行，于是就有了如下使用：
  	
-~~~ Objective - C
+~~~ Objective-C
  	
 [view1 mas_makeConstraints:^(MASConstraintMaker *make) {
 	make.top.equalTo(superview.mas_top).with.offset(10); 
@@ -443,7 +443,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
  	
 这样，其实很容易就能想到这个 `mas_makeConstraints:^(MASConstraintMaker *make)` 方法是如何实现的：
  	
-~~~ Objective - C
+~~~ Objective-C
  	
 - (NSArray *)mas_makeConstraints:(void(^)(MASConstraintMaker *))block {
 	self.translatesAutoresizingMaskIntoConstraints = NO;
@@ -456,7 +456,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
  	
 当然了，系统比较傻，view 的添加约束方法只有添加
 
-~~~ Objective - C
+~~~ Objective-C
  	
 // UIView.h
  	
@@ -468,7 +468,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
  	
 但是问题是，约束重复叠加是会出问题的。因此 Masonry 提供了两个方法：
  	
-~~~ Objective - C
+~~~ Objective-C
  	
 // 更新现有的约束
 - (NSArray *)mas_updateConstraints:(void(^)(MASConstraintMaker *make))block;
@@ -484,7 +484,7 @@ make.left.equalTo(superView.mas_top).offset(10).multipliedBy(1.0);
 	
 这个类其实很简单，就是添加了一个属性来做 Debug。其他没有了。
 	
-~~~ Objective - C
+~~~ Objective-C
 	
 @property (nonatomic, strong) id mas_key;
 	
