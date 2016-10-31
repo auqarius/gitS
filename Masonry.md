@@ -171,7 +171,7 @@ Masonry 主要的类结构有：
   
 **同理：**
   
- ~~~ Objective - C
+~~~ Objective - C
  
 - (MASConstraint * (^)(CGFloat offset))offset;
 - (MASConstraint * (^)(CGFloat multiplier))multipliedBy;
