@@ -162,14 +162,14 @@ M.unit(value: 8).bind { (v1: Int) -> M<Int> in
 
 ## ReactiveCocoa 实现
 
-在上一个章节中了解到，ReactiveCocoa 实现了 FRP，也了解了什么是 FRP。在温习一下，FRP 的关键点在于：
+在上一个章节中了解到，ReactiveCocoa 实现了 FRP，也了解了什么是 FRP。再温习一下，FRP 的关键点在于：
 
 1. Stream
 2. Subscribe
 
 再次来看一下一个 Stream 的整个订阅过程：
 
-
+![StreamImage](https://s-media-cache-ak0.pinimg.com/564x/9d/e3/f8/9de3f880e3d8499e975e73441edf78c2.jpg)
 
 而对于 ReactiveCocoa 来说，其重点实现为：
 
@@ -177,6 +177,9 @@ M.unit(value: 8).bind { (v1: Int) -> M<Int> in
 2. RACSubscriber：做订阅动作的订阅者。
 3. RACSignal：RACStream 在 ReactiveCocoa 中只是一个流的抽象，而 RACSignal 以及其类簇才是真正实现功能的地方。
 4. RACDisposable：当一个订阅者结束订阅的时候，需要将在订阅的时候创建的数据清除或者将创建的其他任务结束，约等于收尾工作。
-5. RACScheduler：Schedulers 是用来控制任务在什么时候什么位置执行的。在订阅的一个 Signal 的时候，RACScheduler 将创建 RACSignal 的时候的代码放在了线程中执行。
+5. RACScheduler：封装了 GCD，用来控制任务在什么时候什么位置执行。在订阅的一个 Signal 的时候，RACScheduler 将创建 RACSignal 的时候传入的 block 放在了线程中执行。
+
+看起来是比纯粹的 RP 订阅过程要复杂一些，其实重点还是 `RACSignal` 和 `RACSubscriber` 其他的东西都是围绕这这俩进行的，先看一下 Reactivecocoa 整个订阅过程：
+ 
 
 
