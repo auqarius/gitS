@@ -2,7 +2,7 @@
 
 ## ReactiveCocoa 解决了什么问题
 
-ReactiveCocoa 是一个 iOS 中的函数式响应式编程框架，它改变了我们在使用 Cocoa时的思维和方式。
+ReactiveCocoa 是一个 iOS 中的函数式响应式编程框架，它改变了我们在使用 Cocoa 时的思维和方式。
 
 它将苹果的 API 进行了一次封装改造，使其可以使用响应式进行编程。
 
@@ -142,7 +142,7 @@ M.unit(value: 8).bind { (v1: Int) -> M<Int> in
 
 > FRP是更加有效率地处理事件流，而无需显式去管理状态。
 
-惯例不展开讨论，下面是两个讲解：
+这里也不展开讨论了，下面是两个讲解：
 
 1. [什么是函数响应式编程(Functional Reactive Programming:FRP)](http://www.jdon.com/45581)
 2. [PR 入门](https://github.com/benjycui/introrx-chinese-edition#rp入门)
@@ -165,15 +165,18 @@ M.unit(value: 8).bind { (v1: Int) -> M<Int> in
 在上一个章节中了解到，ReactiveCocoa 实现了 FRP，也了解了什么是 FRP。在温习一下，FRP 的关键点在于：
 
 1. Stream
-2. Subscrib
+2. Subscribe
+
+再次来看一下一个 Stream 的整个订阅过程：
+
+
 
 而对于 ReactiveCocoa 来说，其重点实现为：
 
-1. RACStream
-2. RACSubscriber
-3. RACSignal
-4. RACDisapsoal
-
-
+1. RACStream：对应响应式中的 Stream，它是一个 Monad。
+2. RACSubscriber：做订阅动作的订阅者。
+3. RACSignal：RACStream 在 ReactiveCocoa 中只是一个流的抽象，而 RACSignal 以及其类簇才是真正实现功能的地方。
+4. RACDisposable：当一个订阅者结束订阅的时候，需要将在订阅的时候创建的数据清除或者将创建的其他任务结束，约等于收尾工作。
+5. RACScheduler：Schedulers 是用来控制任务在什么时候什么位置执行的。在订阅的一个 Signal 的时候，RACScheduler 将创建 RACSignal 的时候的代码放在了线程中执行。
 
 
