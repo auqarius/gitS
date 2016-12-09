@@ -836,3 +836,378 @@ return [class return:block(value)];
 在这里就不展开分析了，只要了解了 bind 和每个方法的目的，就会很容易理解其操作与使用。
 
 ## ReaciveCocoa 对 Cocoa 的封装
+ReactiveCocoa 对 Cocoa API 进行了一次封装，在使用的时候，用处比较大的有：
+
+* 代替 `UIControlEvents` 的处理：例如按钮的点击就是 `UIControlEventsTouchUpInside`。
+* 代替 delegate 的处理：例如 `UIAlertView` 的点击事件。
+* 代替 KVO 的处理
+
+### UIControlEvents
+
+类似 `UIButton` 的点击事件、`UISlider` 、`UIStepper`、`UISwitch`、`UISegmentedControl` 的 valueChanged 事件，总之，在使用的时候，如果一个控件的值改变或者事件触发是根据 `UIControlEvents` 枚举来监听的，都是一种实现方法。
+
+首先 `UIControlEvents` 使用 `-addTarget:action:forControlEvents:` 方法，一般控件的初始化和监控方法是分开的：
+
+```
+- (void)addLoginButton {
+	UIButton *loginButton = [UIButton buttonWithType:UIButtonTypeCustom];
+	[loginButton addTarget:self action:@selector(login:) forControlEvents:(UIControlEventTouchUpInside)];
+}
+
+- (void)login:(id)sender {
+    // login
+}
+```
+而经过 ReactiveCocoa 封装过后的使用方式如下：
+
+```
+// UIControlEvents
+UIButton *loginButton = [UIButton buttonWithType:UIButtonTypeCustom];
+[[loginButton rac_signalForControlEvents:UIControlEventTouchUpInside] subscribeNext:^(id x) {
+    // login
+}];
+```
+封装过后的使用方式更加简便，初始化和事件触发都在一个地方。
+
+ReactiveCocoa 给 UIControl 添加了分类，在这个分类中添加了 `rac_signalForControlEvents:`  的实现，下面是它的实现：
+
+```
+// UIControl+RACSignalSupport.h
+
+- (RACSignal *)rac_signalForControlEvents:(UIControlEvents)controlEvents {
+	@weakify(self);
+
+	return [[RACSignal
+		createSignal:^(id<RACSubscriber> subscriber) {
+			@strongify(self);
+
+			[self addTarget:subscriber action:@selector(sendNext:) forControlEvents:controlEvents];
+			[self.rac_deallocDisposable addDisposable:[RACDisposable disposableWithBlock:^{
+				[subscriber sendCompleted];
+			}]];
+
+			return [RACDisposable disposableWithBlock:^{
+				@strongify(self);
+				[self removeTarget:subscriber action:@selector(sendNext:) forControlEvents:controlEvents];
+			}];
+		}]
+		setNameWithFormat:@"%@ -rac_signalForControlEvents: %lx", self.rac_description, (unsigned long)controlEvents];
+}
+```
+实现过程非常简单：新建一个 RACSignal，依然调用 `-addTarget:action:forControlEvents:` 方法，将 target 设置为订阅者，然后在事件触发的时候调用 `sendNext:` 方法，当 self 被销毁的时候订阅者 `sendComplete`，当这个信号不再被订阅的时候移除监听。
+
+### Delegate 处理
+
+换句话说，协议的处理，或者说，某个方法的调用，我们都可以将其设定成为一个 signal。这个东西在 cocoa 中用处其实一般，但是其实现方法值得学习。
+
+比如我们需要监听 UIAlertView 的 `alertView:clickedButtonAtIndex:` 方法，可以这样写：
+
+```
+[[self rac_signalForSelector:@selector(alertView:clickedButtonAtIndex:) fromProtocol:@protocol(UIAlertViewDelegate)] subscribeNext:^(RACTuple *args) {
+        UIAlertView *alert = args.first;
+        NSNumber *index = args.second;
+}];
+```
+这个方法是定义在 `NSObject+RACSelectorSignal.h` 中的，其实这个分类的目的不是为了代理，它提供了两个方法：
+
+```
+// NSObject+RACSelectorSignal.h
+
+// 将方法转换为 signal
+- (RACSignal *)rac_signalForSelector:(SEL)selector;
+
+// 将协议的方法转换为 signal
+- (RACSignal *)rac_signalForSelector:(SEL)selector fromProtocol:(Protocol *)protocol;
+```
+他们的实现是这样的：
+
+```
+// NSObject+RACSelectorSignal.m
+
+- (RACSignal *)rac_signalForSelector:(SEL)selector {
+	NSCParameterAssert(selector != NULL);
+
+	return NSObjectRACSignalForSelector(self, selector, NULL);
+}
+
+- (RACSignal *)rac_signalForSelector:(SEL)selector fromProtocol:(Protocol *)protocol {
+	NSCParameterAssert(selector != NULL);
+	NSCParameterAssert(protocol != NULL);
+
+	return NSObjectRACSignalForSelector(self, selector, protocol);
+}
+```
+所以，重点是 NSObjectRACSignalForSelector(selector, protocol) 这个方法的实现，它将一个方法转换成为了 signal。以下为实现，比较复杂：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static RACSignal *NSObjectRACSignalForSelector(NSObject *self, SEL selector, Protocol *protocol) {
+	// 一个别名方法名
+	SEL aliasSelector = RACAliasForSelector(selector);
+
+	@synchronized (self) {
+		// 后面会将方法转换为一个 RACSubject，并且使用 runtime 保存为一个属性，key 为别名方法名
+		RACSubject *subject = objc_getAssociatedObject(self, aliasSelector);
+		// 如果这个方法的对应信号已经创建，那么将不再创建
+		if (subject != nil) return subject;
+		
+		// 重点方法，主要是利用 MethodSwizzle 技术
+		// 使用 runtime 新建了一个实现放到了消息转发方法
+		// forwardInvocation: 中，在新的实现中：
+		// 每次调用都将会把对应的参数使用元组（RACTuple）的方式封装
+		// 并且使用 subject 的 sendNext: 方法发送
+		// 给一个类添加消息转发方法的时候还必须实现 methodSignatureForSelector: 方法
+		// 因此也为这个方法新建了实现
+		// 因为也考虑到 selector 方法可能是协议方法，本类中本来并没有实现
+		// 为 responseToSelector 方法也创建了一个新的实现
+		// 返回一个类型，后面的获取方法等操作都是在这个类下操作的
+		Class class = RACSwizzleClass(self);
+		NSCAssert(class != nil, @"Could not swizzle class of %@", self);
+		
+		// 新建 RACSubject 信号，并存储为属性
+		subject = [[RACSubject subject] setNameWithFormat:@"%@ -rac_signalForSelector: %s", self.rac_description, sel_getName(selector)];
+		objc_setAssociatedObject(self, aliasSelector, subject, OBJC_ASSOCIATION_RETAIN);
+
+		[self.rac_deallocDisposable addDisposable:[RACDisposable disposableWithBlock:^{
+			[subject sendCompleted];
+		}]];
+		
+		// 根据方法名在本类中获取方法
+		Method targetMethod = class_getInstanceMethod(class, selector);
+		if (targetMethod == NULL) {
+			// 方法为空，则表示这个方法是 protocol 方法
+			// 用来获取方法的参数及返回值类型
+			const char *typeEncoding;
+			if (protocol == NULL) {
+				// 如果没有设定协议，那么这个方法是未定义方法
+				typeEncoding = RACSignatureForUndefinedSelector(selector);
+			} else {
+				// 协议方法
+				// Look for the selector as an optional instance method.
+				// 获取协议方法描述
+				struct objc_method_description methodDescription = protocol_getMethodDescription(protocol, selector, NO, YES);
+				
+				// 检测这个协议是否包含对应的方法
+				if (methodDescription.name == NULL) {
+					// Then fall back to looking for a required instance
+					// method.
+					methodDescription = protocol_getMethodDescription(protocol, selector, YES, YES);
+					NSCAssert(methodDescription.name != NULL, @"Selector %@ does not exist in <%s>", NSStringFromSelector(selector), protocol_getName(protocol));
+				}
+				
+				// 获取协议方法的参数及返回值类型
+				typeEncoding = methodDescription.types;
+			}
+			
+			// 检测这些类型是否都被编码
+			RACCheckTypeEncoding(typeEncoding);
+
+			// Define the selector to call -forwardInvocation:.
+			// 添加这个方法，并将这个方法的实现指定为消息转发方法 
+			if (!class_addMethod(class, selector, _objc_msgForward, typeEncoding)) {
+				// 创建不成功的话信号将返回错误
+				NSDictionary *userInfo = @{
+					NSLocalizedDescriptionKey: [NSString stringWithFormat:NSLocalizedString(@"A race condition occurred implementing %@ on class %@", nil), NSStringFromSelector(selector), class],
+					NSLocalizedRecoverySuggestionErrorKey: NSLocalizedString(@"Invoke -rac_signalForSelector: again to override the implementation.", nil)
+				};
+
+				return [RACSignal error:[NSError errorWithDomain:RACSelectorSignalErrorDomain code:RACSelectorSignalErrorMethodSwizzlingRace userInfo:userInfo]];
+			}
+		} else if (method_getImplementation(targetMethod) != _objc_msgForward) {
+			// 本类包含的方法，但是不能是消息转发方法
+			// Make a method alias for the existing method implementation.
+			const char *typeEncoding = method_getTypeEncoding(targetMethod);
+
+			RACCheckTypeEncoding(typeEncoding);
+			
+			// 添加别名方法，其实现为原方法的实现
+			BOOL addedAlias __attribute__((unused)) = class_addMethod(class, aliasSelector, method_getImplementation(targetMethod), typeEncoding);
+			NSCAssert(addedAlias, @"Original implementation for %@ is already copied to %@ on %@", NSStringFromSelector(selector), NSStringFromSelector(aliasSelector), class);
+			
+			// 将原方法的实现替换为消息转发方法的实现
+			// Redefine the selector to call -forwardInvocation:.
+			class_replaceMethod(class, selector, _objc_msgForward, method_getTypeEncoding(targetMethod));
+		}
+		
+		return subject;
+	}
+}
+```
+如果不关心 `RACSwizzleClass ` 方法的实现，这里已经可以解释整个实现过程了，本着问到底的原则，还是要再看看这里的实现：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static Class RACSwizzleClass(NSObject *self) {
+	// 获取本类的类型，这里用两种方式获取
+	// 是因为如果使用类簇开发的，这两个获取的结果不一样
+	// statedClass 获取的是调用的类
+	// baseClass 获取的是真正创建的类
+	Class statedClass = self.class;
+	Class baseClass = object_getClass(self);
+
+	// 因为后面将会动态新建一个子类，并将类型保存为本类的属性
+	// 如果这个属性存在则返回这个子类
+	// The "known dynamic subclass" is the subclass generated by RAC.
+	// It's stored as an associated object on every instance that's already
+	// been swizzled, so that even if something else swizzles the class of
+	// this instance, we can still access the RAC generated subclass.
+	Class knownDynamicSubclass = objc_getAssociatedObject(self, RACSubclassAssociationKey);
+	if (knownDynamicSubclass != Nil) return knownDynamicSubclass;
+
+	NSString *className = NSStringFromClass(baseClass);
+	
+	// 如果两个不相等
+	// 则表示这个对象使用类簇或者使用其他方式隐藏了本类本来的类型
+	if (statedClass != baseClass) {
+		// If the class is already lying about what it is, it's probably a KVO
+		// dynamic subclass or something else that we shouldn't subclass
+		// ourselves.
+		//
+		// Just swizzle -forwardInvocation: in-place. Since the object's class
+		// was almost certainly dynamically changed, we shouldn't see another of
+		// these classes in the hierarchy.
+		//
+		// Additionally, swizzle -respondsToSelector: because the default
+		// implementation may be ignorant of methods added to this class.
+		@synchronized (swizzledClasses()) {
+			// 在实际实现的类上 swizzle 对应的方法
+			if (![swizzledClasses() containsObject:className]) {
+				RACSwizzleForwardInvocation(baseClass);
+				RACSwizzleRespondsToSelector(baseClass);
+				RACSwizzleGetClass(baseClass, statedClass);
+				RACSwizzleGetClass(object_getClass(baseClass), statedClass);
+				RACSwizzleMethodSignatureForSelector(baseClass);
+				[swizzledClasses() addObject:className];
+			}
+		}
+
+		return baseClass;
+	}
+	
+	// 如果这个类就是实现的类
+	// 那么将新建一个这个类的子类
+	// 这个子类的名字是原类名字后面添加 _RACSelectorSignal 
+	// 然后 swizzle 这个子类的对应方法
+	// 获取子类名字
+	const char *subclassName = [className stringByAppendingString:RACSubclassSuffix].UTF8String;
+	// 获取子类
+	Class subclass = objc_getClass(subclassName);
+
+	// 如果子类没有创建
+	if (subclass == nil) {
+		// 创建子类
+		subclass = [RACObjCRuntime createClass:subclassName inheritingFromClass:baseClass];
+		if (subclass == nil) return nil;
+		
+		// swizzle 对应方法
+		RACSwizzleForwardInvocation(subclass);
+		RACSwizzleRespondsToSelector(subclass);
+
+		RACSwizzleGetClass(subclass, statedClass);
+		RACSwizzleGetClass(object_getClass(subclass), statedClass);
+
+		RACSwizzleMethodSignatureForSelector(subclass);
+		
+		// 注册这个类
+		objc_registerClassPair(subclass);
+	}
+	
+	// 将本类的类型设置为子类类型
+	object_setClass(self, subclass);
+	// 将子类保存为属性
+	objc_setAssociatedObject(self, RACSubclassAssociationKey, subclass, OBJC_ASSOCIATION_ASSIGN);
+	return subclass;
+}
+```
+其实看看也会发现有很多细节，以及 ReactiveCocoa 在实现功能的时候的安全性以及特殊性考虑是非常细致的。这个非常考验开发者对 Cocoa 底层实现细节的理解程度，看这段代码的时候我也是研究了很久才搞明白它在干什么，关于 `self.class` 和 `objc_getClass(self)` 结果不同的原因我也是查了一些资料才搞明白的，想详细了解的可以查看：
+
+* [为什么object_getClass(obj)与[OBJ class]返回的指针不同](http://www.jianshu.com/p/54c190542aa8)
+
+上面一段中，最重要的方法是 `RACSwizzleForwardInvocation ` ，在这里展开说明一下：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static void RACSwizzleForwardInvocation(Class class) {
+	// 获取原消息转发方法
+	SEL forwardInvocationSEL = @selector(forwardInvocation:);
+	Method forwardInvocationMethod = class_getInstanceMethod(class, forwardInvocationSEL);
+
+	// 暂存原消息转发方法
+	// Preserve any existing implementation of -forwardInvocation:.
+	void (*originalForwardInvocation)(id, SEL, NSInvocation *) = NULL;
+	if (forwardInvocationMethod != NULL) {
+		originalForwardInvocation = (__typeof__(originalForwardInvocation))method_getImplementation(forwardInvocationMethod);
+	}
+
+	// 新建一个消息转发方法的实现
+	// Set up a new version of -forwardInvocation:.
+	//
+	// If the selector has been passed to -rac_signalForSelector:, invoke
+	// the aliased method, and forward the arguments to any attached signals.
+	//
+	// If the selector has not been passed to -rac_signalForSelector:,
+	// invoke any existing implementation of -forwardInvocation:. If there
+	// was no existing implementation, throw an unrecognized selector
+	// exception.
+	id newForwardInvocation = ^(id self, NSInvocation *invocation) {
+		// 发送消息
+		BOOL matched = RACForwardInvocation(self, invocation);
+		// 如果发送消息成功，则不再有任何处理
+		if (matched) return;
+		
+		// 发送消息失败
+		if (originalForwardInvocation == NULL) {
+			// 如果原方法不存在，报错，表示这个方法不存在
+			[self doesNotRecognizeSelector:invocation.selector];
+		} else {
+			// 如果原方法存在，则调用原方法
+			originalForwardInvocation(self, forwardInvocationSEL, invocation);
+		}
+	};
+	
+	// 将原消息转发方法的实现替换为新建的实现
+	class_replaceMethod(class, forwardInvocationSEL, imp_implementationWithBlock(newForwardInvocation), "v@:@");
+}
+```
+新建的消息转发方法的实现中，最重要的一段是 `RACForwardInvocation`，在看代码的时候差点吐出血来，居然还要跳一个方法。不过转念想想，毕竟功能不同，写成另一个方法很合适，这也说明了写代码要规范。那么继续看这个方法的实现：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static BOOL RACForwardInvocation(id self, NSInvocation *invocation) {
+	// 在转换最开始的时候，对于将要被转换为 signal 的 selector
+	// ReactiveCocoa 新建了一个别名方法
+	// 并且将转换的 signal 使用这个方法的名字当做 key 保存成了属性
+	// 取出来这个属性
+	SEL aliasSelector = RACAliasForSelector(invocation.selector);
+	RACSubject *subject = objc_getAssociatedObject(self, aliasSelector);
+
+	// 先获取消息转发的目标类
+	Class class = object_getClass(invocation.target);
+	// 如果这个类有这个别名方法
+	BOOL respondsToAlias = [class instancesRespondToSelector:aliasSelector];
+	if (respondsToAlias) {
+		// 设定方法名
+		invocation.selector = aliasSelector;
+		// 调用这个方法
+		[invocation invoke];
+	}
+	
+	// 没有信号，则说明这个方法并没有被转换为 signal
+	// 则返回这个类是否存在这个别名方法
+	if (subject == nil) return respondsToAlias;
+	
+	// 将这个 invocation 传递进去的参数封装成 RACTuple 发送出去
+	[subject sendNext:invocation.rac_argumentsTuple];
+	return YES;
+}
+```
+
+这样就结束了，关于 RACTuple，它代表了一个元组，是 ReactiveCocoa 自己创建的一个元组类，用来管理元组中的元素。而 `rac_argmentsTuple` 这个方法是 ReactiveCocoa 新建了一个 `NSInvocation` 的分类，将其接收到的参数放到 RACTuple 中。
+
+### 代替 KVO 的处理
+
+
