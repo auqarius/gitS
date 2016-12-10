@@ -562,7 +562,7 @@ RACSequence 存在的目的是为了简化 Objective-C 里面的集合操作，�
 
 ### 总结
 
-以上就是 ReactiveCocoa 的来由和基本架构及相关实现了。不过对于函数式和 Monad，还有很多操作，我们的 bind 还没有发挥作用呢，有了 bind 功能，可以实现很多更加自由的东西，比如 map，flattenMap 等功能。ReactiveCocoa 还对 cocoa 的一些接口进行了封装，将一些数据和事件做成了事件流来方便我们使用。
+以上就是 ReactiveCocoa 的来由和基本架构及相关实现了。不过对于函数式和 Monad，还有很多操作，我们的 bind 还没有发挥作用呢，有了 bind 功能，可以实现很多更加自由的东西，比如 map，flattenMap 等非常强大的功能。ReactiveCocoa 还对 cocoa 的一些接口进行了封装，将一些数据和事件做成了事件流来方便我们使用。
 
 在这里有一个 OC 里面的思路可以学习，就是使用类簇来实现相关功能，类似 `RACScheduler`、`RACSignal`、`RACDisposable`、`RACSubscriber`，都是使用类簇来完成相关功能，每一个子类都是为了完成一个功能，然后使用的时候使用父类来根据不同的功能创建不同的子类。
 
@@ -836,3 +836,562 @@ return [class return:block(value)];
 在这里就不展开分析了，只要了解了 bind 和每个方法的目的，就会很容易理解其操作与使用。
 
 ## ReaciveCocoa 对 Cocoa 的封装
+ReactiveCocoa 对 Cocoa API 进行了一次封装，在使用的时候，用处比较大的有：
+
+* 代替 `UIControlEvents` 的处理：例如按钮的点击就是 `UIControlEventsTouchUpInside`。
+* 代替 delegate 的处理：例如 `UIAlertView` 的点击事件。
+* 代替 KVO 的处理
+
+### UIControlEvents
+
+类似 `UIButton` 的点击事件、`UISlider` 、`UIStepper`、`UISwitch`、`UISegmentedControl` 的 valueChanged 事件，总之，在使用的时候，如果一个控件的值改变或者事件触发是根据 `UIControlEvents` 枚举来监听的，都是一种实现方法。
+
+首先 `UIControlEvents` 使用 `-addTarget:action:forControlEvents:` 方法，一般控件的初始化和监控方法是分开的：
+
+```
+- (void)addLoginButton {
+	UIButton *loginButton = [UIButton buttonWithType:UIButtonTypeCustom];
+	[loginButton addTarget:self action:@selector(login:) forControlEvents:(UIControlEventTouchUpInside)];
+}
+
+- (void)login:(id)sender {
+    // login
+}
+```
+而经过 ReactiveCocoa 封装过后的使用方式如下：
+
+```
+// UIControlEvents
+UIButton *loginButton = [UIButton buttonWithType:UIButtonTypeCustom];
+[[loginButton rac_signalForControlEvents:UIControlEventTouchUpInside] subscribeNext:^(id x) {
+    // login
+}];
+```
+封装过后的使用方式更加简便，初始化和事件触发都在一个地方。
+
+ReactiveCocoa 给 UIControl 添加了分类，在这个分类中添加了 `rac_signalForControlEvents:`  的实现，下面是它的实现：
+
+```
+// UIControl+RACSignalSupport.h
+
+- (RACSignal *)rac_signalForControlEvents:(UIControlEvents)controlEvents {
+	@weakify(self);
+
+	return [[RACSignal
+		createSignal:^(id<RACSubscriber> subscriber) {
+			@strongify(self);
+
+			[self addTarget:subscriber action:@selector(sendNext:) forControlEvents:controlEvents];
+			[self.rac_deallocDisposable addDisposable:[RACDisposable disposableWithBlock:^{
+				[subscriber sendCompleted];
+			}]];
+
+			return [RACDisposable disposableWithBlock:^{
+				@strongify(self);
+				[self removeTarget:subscriber action:@selector(sendNext:) forControlEvents:controlEvents];
+			}];
+		}]
+		setNameWithFormat:@"%@ -rac_signalForControlEvents: %lx", self.rac_description, (unsigned long)controlEvents];
+}
+```
+实现过程非常简单：新建一个 RACSignal，依然调用 `-addTarget:action:forControlEvents:` 方法，将 target 设置为订阅者，然后在事件触发的时候调用 `sendNext:` 方法，当 self 被销毁的时候订阅者 `sendComplete`，当这个信号不再被订阅的时候移除监听。
+
+### Delegate 处理
+
+换句话说，协议的处理，或者说，某个方法的调用，我们都可以将其设定成为一个 signal。这个东西在 cocoa 中用处其实一般，但是其实现方法值得学习。
+
+比如我们需要监听 UIAlertView 的 `alertView:clickedButtonAtIndex:` 方法，可以这样写：
+
+```
+[[self rac_signalForSelector:@selector(alertView:clickedButtonAtIndex:) fromProtocol:@protocol(UIAlertViewDelegate)] subscribeNext:^(RACTuple *args) {
+        UIAlertView *alert = args.first;
+        NSNumber *index = args.second;
+}];
+```
+这个方法是定义在 `NSObject+RACSelectorSignal.h` 中的，其实这个分类的目的不是为了代理，它提供了两个方法：
+
+```
+// NSObject+RACSelectorSignal.h
+
+// 将方法转换为 signal
+- (RACSignal *)rac_signalForSelector:(SEL)selector;
+
+// 将协议的方法转换为 signal
+- (RACSignal *)rac_signalForSelector:(SEL)selector fromProtocol:(Protocol *)protocol;
+```
+他们的实现是这样的：
+
+```
+// NSObject+RACSelectorSignal.m
+
+- (RACSignal *)rac_signalForSelector:(SEL)selector {
+	NSCParameterAssert(selector != NULL);
+
+	return NSObjectRACSignalForSelector(self, selector, NULL);
+}
+
+- (RACSignal *)rac_signalForSelector:(SEL)selector fromProtocol:(Protocol *)protocol {
+	NSCParameterAssert(selector != NULL);
+	NSCParameterAssert(protocol != NULL);
+
+	return NSObjectRACSignalForSelector(self, selector, protocol);
+}
+```
+所以，重点是 NSObjectRACSignalForSelector(selector, protocol) 这个方法的实现，它将一个方法转换成为了 signal。以下为实现，比较复杂：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static RACSignal *NSObjectRACSignalForSelector(NSObject *self, SEL selector, Protocol *protocol) {
+	// 一个别名方法名
+	SEL aliasSelector = RACAliasForSelector(selector);
+
+	@synchronized (self) {
+		// 后面会将方法转换为一个 RACSubject，并且使用 runtime 保存为一个属性，key 为别名方法名
+		RACSubject *subject = objc_getAssociatedObject(self, aliasSelector);
+		// 如果这个方法的对应信号已经创建，那么将不再创建
+		if (subject != nil) return subject;
+		
+		// 重点方法，主要是利用 MethodSwizzle 技术
+		// 使用 runtime 新建了一个实现放到了消息转发方法
+		// forwardInvocation: 中，在新的实现中：
+		// 每次调用都将会把对应的参数使用元组（RACTuple）的方式封装
+		// 并且使用 subject 的 sendNext: 方法发送
+		// 给一个类添加消息转发方法的时候还必须实现 methodSignatureForSelector: 方法
+		// 因此也为这个方法新建了实现
+		// 因为也考虑到 selector 方法可能是协议方法，本类中本来并没有实现
+		// 为 responseToSelector 方法也创建了一个新的实现
+		// 返回一个类型，后面的获取方法等操作都是在这个类下操作的
+		Class class = RACSwizzleClass(self);
+		NSCAssert(class != nil, @"Could not swizzle class of %@", self);
+		
+		// 新建 RACSubject 信号，并存储为属性
+		subject = [[RACSubject subject] setNameWithFormat:@"%@ -rac_signalForSelector: %s", self.rac_description, sel_getName(selector)];
+		objc_setAssociatedObject(self, aliasSelector, subject, OBJC_ASSOCIATION_RETAIN);
+
+		[self.rac_deallocDisposable addDisposable:[RACDisposable disposableWithBlock:^{
+			[subject sendCompleted];
+		}]];
+		
+		// 根据方法名在本类中获取方法
+		Method targetMethod = class_getInstanceMethod(class, selector);
+		if (targetMethod == NULL) {
+			// 方法为空，则表示这个方法是 protocol 方法
+			// 用来获取方法的参数及返回值类型
+			const char *typeEncoding;
+			if (protocol == NULL) {
+				// 如果没有设定协议，那么这个方法是未定义方法
+				typeEncoding = RACSignatureForUndefinedSelector(selector);
+			} else {
+				// 协议方法
+				// Look for the selector as an optional instance method.
+				// 获取协议方法描述
+				struct objc_method_description methodDescription = protocol_getMethodDescription(protocol, selector, NO, YES);
+				
+				// 检测这个协议是否包含对应的方法
+				if (methodDescription.name == NULL) {
+					// Then fall back to looking for a required instance
+					// method.
+					methodDescription = protocol_getMethodDescription(protocol, selector, YES, YES);
+					NSCAssert(methodDescription.name != NULL, @"Selector %@ does not exist in <%s>", NSStringFromSelector(selector), protocol_getName(protocol));
+				}
+				
+				// 获取协议方法的参数及返回值类型
+				typeEncoding = methodDescription.types;
+			}
+			
+			// 检测这些类型是否都被编码
+			RACCheckTypeEncoding(typeEncoding);
+
+			// Define the selector to call -forwardInvocation:.
+			// 添加这个方法，并将这个方法的实现指定为消息转发方法 
+			if (!class_addMethod(class, selector, _objc_msgForward, typeEncoding)) {
+				// 创建不成功的话信号将返回错误
+				NSDictionary *userInfo = @{
+					NSLocalizedDescriptionKey: [NSString stringWithFormat:NSLocalizedString(@"A race condition occurred implementing %@ on class %@", nil), NSStringFromSelector(selector), class],
+					NSLocalizedRecoverySuggestionErrorKey: NSLocalizedString(@"Invoke -rac_signalForSelector: again to override the implementation.", nil)
+				};
+
+				return [RACSignal error:[NSError errorWithDomain:RACSelectorSignalErrorDomain code:RACSelectorSignalErrorMethodSwizzlingRace userInfo:userInfo]];
+			}
+		} else if (method_getImplementation(targetMethod) != _objc_msgForward) {
+			// 本类包含的方法，但是不能是消息转发方法
+			// Make a method alias for the existing method implementation.
+			const char *typeEncoding = method_getTypeEncoding(targetMethod);
+
+			RACCheckTypeEncoding(typeEncoding);
+			
+			// 添加别名方法，其实现为原方法的实现
+			BOOL addedAlias __attribute__((unused)) = class_addMethod(class, aliasSelector, method_getImplementation(targetMethod), typeEncoding);
+			NSCAssert(addedAlias, @"Original implementation for %@ is already copied to %@ on %@", NSStringFromSelector(selector), NSStringFromSelector(aliasSelector), class);
+			
+			// 将原方法的实现替换为消息转发方法的实现
+			// Redefine the selector to call -forwardInvocation:.
+			class_replaceMethod(class, selector, _objc_msgForward, method_getTypeEncoding(targetMethod));
+		}
+		
+		return subject;
+	}
+}
+```
+如果不关心 `RACSwizzleClass ` 方法的实现，这里已经可以解释整个实现过程了，本着问到底的原则，还是要再看看这里的实现：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static Class RACSwizzleClass(NSObject *self) {
+	// 获取本类的类型，这里用两种方式获取
+	// 是因为如果使用类簇开发的，这两个获取的结果不一样
+	// statedClass 获取的是调用的类
+	// baseClass 获取的是真正创建的类
+	Class statedClass = self.class;
+	Class baseClass = object_getClass(self);
+
+	// 因为后面将会动态新建一个子类，并将类型保存为本类的属性
+	// 如果这个属性存在则返回这个子类
+	// The "known dynamic subclass" is the subclass generated by RAC.
+	// It's stored as an associated object on every instance that's already
+	// been swizzled, so that even if something else swizzles the class of
+	// this instance, we can still access the RAC generated subclass.
+	Class knownDynamicSubclass = objc_getAssociatedObject(self, RACSubclassAssociationKey);
+	if (knownDynamicSubclass != Nil) return knownDynamicSubclass;
+
+	NSString *className = NSStringFromClass(baseClass);
+	
+	// 如果两个不相等
+	// 则表示这个对象使用类簇或者使用其他方式隐藏了本类本来的类型
+	if (statedClass != baseClass) {
+		// If the class is already lying about what it is, it's probably a KVO
+		// dynamic subclass or something else that we shouldn't subclass
+		// ourselves.
+		//
+		// Just swizzle -forwardInvocation: in-place. Since the object's class
+		// was almost certainly dynamically changed, we shouldn't see another of
+		// these classes in the hierarchy.
+		//
+		// Additionally, swizzle -respondsToSelector: because the default
+		// implementation may be ignorant of methods added to this class.
+		@synchronized (swizzledClasses()) {
+			// 在实际实现的类上 swizzle 对应的方法
+			if (![swizzledClasses() containsObject:className]) {
+				RACSwizzleForwardInvocation(baseClass);
+				RACSwizzleRespondsToSelector(baseClass);
+				RACSwizzleGetClass(baseClass, statedClass);
+				RACSwizzleGetClass(object_getClass(baseClass), statedClass);
+				RACSwizzleMethodSignatureForSelector(baseClass);
+				[swizzledClasses() addObject:className];
+			}
+		}
+
+		return baseClass;
+	}
+	
+	// 如果这个类就是实现的类
+	// 那么将新建一个这个类的子类
+	// 这个子类的名字是原类名字后面添加 _RACSelectorSignal 
+	// 然后 swizzle 这个子类的对应方法
+	// 获取子类名字
+	const char *subclassName = [className stringByAppendingString:RACSubclassSuffix].UTF8String;
+	// 获取子类
+	Class subclass = objc_getClass(subclassName);
+
+	// 如果子类没有创建
+	if (subclass == nil) {
+		// 创建子类
+		subclass = [RACObjCRuntime createClass:subclassName inheritingFromClass:baseClass];
+		if (subclass == nil) return nil;
+		
+		// swizzle 对应方法
+		RACSwizzleForwardInvocation(subclass);
+		RACSwizzleRespondsToSelector(subclass);
+
+		RACSwizzleGetClass(subclass, statedClass);
+		RACSwizzleGetClass(object_getClass(subclass), statedClass);
+
+		RACSwizzleMethodSignatureForSelector(subclass);
+		
+		// 注册这个类
+		objc_registerClassPair(subclass);
+	}
+	
+	// 将本类的类型设置为子类类型
+	object_setClass(self, subclass);
+	// 将子类保存为属性
+	objc_setAssociatedObject(self, RACSubclassAssociationKey, subclass, OBJC_ASSOCIATION_ASSIGN);
+	return subclass;
+}
+```
+其实看看也会发现有很多细节，以及 ReactiveCocoa 在实现功能的时候的安全性以及特殊性考虑是非常细致的。这个非常考验开发者对 Cocoa 底层实现细节的理解程度，看这段代码的时候我也是研究了很久才搞明白它在干什么，关于 `self.class` 和 `objc_getClass(self)` 结果不同的原因我也是查了一些资料才搞明白的，想详细了解的可以查看：
+
+* [为什么object_getClass(obj)与[OBJ class]返回的指针不同](http://www.jianshu.com/p/54c190542aa8)
+
+上面一段中，最重要的方法是 `RACSwizzleForwardInvocation ` ，在这里展开说明一下：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static void RACSwizzleForwardInvocation(Class class) {
+	// 获取原消息转发方法
+	SEL forwardInvocationSEL = @selector(forwardInvocation:);
+	Method forwardInvocationMethod = class_getInstanceMethod(class, forwardInvocationSEL);
+
+	// 暂存原消息转发方法
+	// Preserve any existing implementation of -forwardInvocation:.
+	void (*originalForwardInvocation)(id, SEL, NSInvocation *) = NULL;
+	if (forwardInvocationMethod != NULL) {
+		originalForwardInvocation = (__typeof__(originalForwardInvocation))method_getImplementation(forwardInvocationMethod);
+	}
+
+	// 新建一个消息转发方法的实现
+	// Set up a new version of -forwardInvocation:.
+	//
+	// If the selector has been passed to -rac_signalForSelector:, invoke
+	// the aliased method, and forward the arguments to any attached signals.
+	//
+	// If the selector has not been passed to -rac_signalForSelector:,
+	// invoke any existing implementation of -forwardInvocation:. If there
+	// was no existing implementation, throw an unrecognized selector
+	// exception.
+	id newForwardInvocation = ^(id self, NSInvocation *invocation) {
+		// 发送消息
+		BOOL matched = RACForwardInvocation(self, invocation);
+		// 如果发送消息成功，则不再有任何处理
+		if (matched) return;
+		
+		// 发送消息失败
+		if (originalForwardInvocation == NULL) {
+			// 如果原方法不存在，报错，表示这个方法不存在
+			[self doesNotRecognizeSelector:invocation.selector];
+		} else {
+			// 如果原方法存在，则调用原方法
+			originalForwardInvocation(self, forwardInvocationSEL, invocation);
+		}
+	};
+	
+	// 将原消息转发方法的实现替换为新建的实现
+	class_replaceMethod(class, forwardInvocationSEL, imp_implementationWithBlock(newForwardInvocation), "v@:@");
+}
+```
+新建的消息转发方法的实现中，最重要的一段是 `RACForwardInvocation`，在看代码的时候差点吐出血来，居然还要跳一个方法。不过转念想想，毕竟功能不同，写成另一个方法很合适，这也说明了写代码要规范。那么继续看这个方法的实现：
+
+```
+// NSObject+RACSelectorSignal.m
+
+static BOOL RACForwardInvocation(id self, NSInvocation *invocation) {
+	// 在转换最开始的时候，对于将要被转换为 signal 的 selector
+	// ReactiveCocoa 新建了一个别名方法
+	// 并且将转换的 signal 使用这个方法的名字当做 key 保存成了属性
+	// 取出来这个属性
+	SEL aliasSelector = RACAliasForSelector(invocation.selector);
+	RACSubject *subject = objc_getAssociatedObject(self, aliasSelector);
+
+	// 先获取消息转发的目标类
+	Class class = object_getClass(invocation.target);
+	// 如果这个类有这个别名方法
+	BOOL respondsToAlias = [class instancesRespondToSelector:aliasSelector];
+	if (respondsToAlias) {
+		// 设定方法名
+		invocation.selector = aliasSelector;
+		// 调用这个方法
+		[invocation invoke];
+	}
+	
+	// 没有信号，则说明这个方法并没有被转换为 signal
+	// 则返回这个类是否存在这个别名方法
+	if (subject == nil) return respondsToAlias;
+	
+	// 将这个 invocation 传递进去的参数封装成 RACTuple 发送出去
+	[subject sendNext:invocation.rac_argumentsTuple];
+	return YES;
+}
+```
+
+这样就结束了，关于 RACTuple，它代表了一个元组，是 ReactiveCocoa 自己创建的一个元组类，用来管理元组中的元素。而 `rac_argmentsTuple` 这个方法是 ReactiveCocoa 新建了一个 `NSInvocation` 的分类，将其接收到的参数放到 RACTuple 中。
+
+在这里说的是 ReactiveCocoa 如何实现将现有的协议转化为信号的。
+
+不使用协议，自己创建 RACSignal 来实现代理的功能就不多讲了，很容易的 RACSignal 创建和订阅行为，主要是要思考到 dispose 的时候需要释放的内容以及一些特殊情况的处理。
+
+### 代替 KVO 的处理
+
+Cocoa 提供的 KVO 使用方式如下：
+
+```
+// 添加监听
+[self addObserver:self forKeyPath:keyPath options:options context:nil];
+
+// 添加回调方法
+-(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context  {  
+    
+} 
+
+// 移除监听
+[self removeObserver:self forKeyPath: keyPath];  
+```
+其实也并不复杂，不过 ReactiveCocoa 将它更加简化了：
+
+```
+[RACObserve(self, keyPath) subscribeNext:^(id x) {
+        
+}];
+```
+将 KVO 变成一个信号，其实 KVO 的整个过程很像一个信号，我们监听信号，处理信号传来的值，再完成监听。
+
+ReactiveCocoa 的实现其实也并不复杂，依旧是封装了 Cocoa 提供的 KVO 使用方法。其关键类如下：
+
+* RACKVOProxy：KVO 代理，当使用 RACObserve 的时候，真正来做监听者的，其实是这个类。
+* RACKVOTrampoline：封装 KVO 的类，继承自 [`RACDisposable`](#RACDisposable)， 提供一个初始化方法，维护一套 KVO 的参数，创建 `RACKVOProxy`，使用 block 发送每次 KVO 触发的时候传来的数据。
+* NSObject+RACKVOWrapper：为 NSObject 添加了 `RACKVOTrampoline` 的使用，处理了各种情况，使用 block 发送每次 KVO 触发的时候传来的数据。
+* NSObject+RACPropertySubscribing：调用 `NSObject+RACKVOWrapper` 的使用将 KVO 转换为信号。
+
+#### <a name="RACKVOTrampoline"></a>RACKVOTrampoline : RACDisposable
+
+仅仅对外暴露了一个初始化方法：
+
+```
+// RACKVOTrampoline.h
+//
+// Initializes the receiver with the given parameters.
+//
+// target   - The object whose key path should be observed. Cannot be nil.
+// observer - The object that gets notified when the value at the key path
+//            changes. Can be nil.
+// keyPath  - The key path on `target` to observe. Cannot be nil.
+// options  - Any key value observing options to use in the observation.
+// block    - The block to call when the value at the observed key path changes.
+//            Cannot be nil.
+//
+// Returns the initialized object.
+- (id)initWithTarget:(__weak NSObject *)target observer:(__weak NSObject *)observer keyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options block:(RACKVOBlock)block;
+```
+
+其实现中仅四个方法：
+
+- 第一个是初始化方法，这个方法将 `target`、`observer`、`keypath`、`block` 保存为属性，然后调用 `addObserver:forKeyPath:options:context:` 方法，而这个方法的 Observer 就是 RACKVOProxy.sharedProxy 单例，context 是 `(__bridge void *)self`。
+- 第二个是 `dealloc` 方法，调用了 `dispose` 方法。
+- 第三个是 `dispose` 方法，调用 `removeObserver:forContext:` 方法。
+- 第四个是 `observeValueForKeyPath:ofObject:change:context:` 方法，调用了 block 来发送数据。
+
+#### RACKVOProxy
+
+真正的监听者，维护 RACKVOTrampoline 和监听的 context 到一个 NSMapTable 表中。提供了如下几个方法：
+
+```
+// 将 RACKVOTrampoline 和 context 绑定
+- (void)addObserver:(__weak NSObject *)observer forContext:(void *)context;
+
+// 解除 RACKVOTrampoline 和 context 的绑定
+- (void)removeObserver:(NSObject *)observer forContext:(void *)context;
+
+// 接收到属性变化的监听，使用 conext 在 NSMapTable 表中取出 RACKVOTrampoline
+// 然后调用其监听方法
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context;
+```
+在我看来，使用 KVO 代理进行监听，是为了尽量不影响到使用者的原代码，这也是一个三方框架的自我修养。
+
+#### NSObject+RACKVOWrapper
+
+一个 NSObject 的分类，提供了一个方法来调用 [RACKVOTrampoline](#RACKVOTrampoline) 。
+
+```
+// NSObject+RACKVOWrapper.h
+//
+// Adds the given block as the callbacks for when the key path changes.
+//
+// Unlike direct KVO observation, this handles deallocation of `weak` properties
+// by generating an appropriate notification. This will only occur if there is
+// an `@property` declaration visible in the observed class, with the `weak`
+// memory management attribute.
+//
+// The observation does not need to be explicitly removed. It will be removed
+// when the observer or the receiver deallocate.
+//
+// keyPath  - The key path to observe. Must not be nil.
+// options  - The KVO observation options.
+// observer - The object that requested the observation. May be nil.
+// block    - The block called when the value at the key path changes. It is
+//            passed the current value of the key path and the extended KVO
+//            change dictionary including RAC-specific keys and values. Must not
+//            be nil.
+//
+// Returns a disposable that can be used to stop the observation.
+- (RACDisposable *)rac_observeKeyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options observer:(__weak NSObject *)observer block:(void (^)(id value, NSDictionary *change, BOOL causedByDealloc, BOOL affectedOnlyLastComponent))block;
+```
+在这里实现中，有两点考虑：
+
+1. RACObserver 监听了 keyPath 中的每一个节点，例如：self.person.name 中的 person 和 name。
+2. 被监听的 keyPath 第一个 path (例如：self.person.name 中的 person) ，是 self 的属性的情况下。如果是weak 的 NSObject 的子类，非 block 非 protocol，则需要添加 dealloc 的监听，并且使用 block 发送 nil。如果是非 weak 的属性，getter 是自己实现的，并且返回的不是对应的 ivar，这个时候监听会认为这个属性被 dealloc，然后发送一个空值。
+
+关于第二个问题，可以查看下面两个 ReactiveCocoa 的 issue：
+
+* [issue #627](https://github.com/ReactiveCocoa/ReactiveCocoa/issues/672)
+* [pull #678](https://github.com/ReactiveCocoa/ReactiveCocoa/pull/678)
+
+#### NSObject+RACPropertySubscribing
+
+因为前面已经处理了很多东西，这里的实现比较简单，创建一个 Signal，然后调用  `NSObject+RACKVOWrapper` 的方法，在 block 触发的时候 `sendNext`。
+
+它提供了两个方法来添加 KVO: 
+
+```
+//  NSObject+RACPropertySubscribing.h
+//
+/// Creates a signal to observe the value at the given key path.
+///
+/// The initial value is sent on subscription, the subsequent values are sent
+/// from whichever thread the change occured on, even if it doesn't have a valid
+/// scheduler.
+///
+/// Returns a signal that immediately sends the receiver's current value at the
+/// given keypath, then any changes thereafter.
+- (RACSignal *)rac_valuesForKeyPath:(NSString *)keyPath observer:(__weak NSObject *)observer;
+
+/// Creates a signal to observe the changes of the given key path.
+///
+/// The initial value is sent on subscription, the subsequent values are sent
+/// from whichever thread the change occured on, even if it doesn't have a valid
+/// scheduler.
+///
+/// Returns a signal that sends tuples containing the current value at the key
+/// path and the change dictionary for each KVO callback.
+- (RACSignal *)rac_valuesAndChangesForKeyPath:(NSString *)keyPath options:(NSKeyValueObservingOptions)options observer:(__weak NSObject *)observer;
+```
+
+但是并没有使用，而是使用了宏 `RACObserve` ：
+
+```
+#define RACObserve(TARGET, KEYPATH) \
+	({ \
+		_Pragma("clang diagnostic push") \
+		_Pragma("clang diagnostic ignored \"-Wreceiver-is-weak\"") \
+		__weak id target_ = (TARGET); \
+		[target_ rac_valuesForKeyPath:@keypath(TARGET, KEYPATH) observer:self]; \
+		_Pragma("clang diagnostic pop") \
+	})
+```
+这里的重点是 keypath 宏，它的作用如下：
+
+```
+NSString *UTF8StringPath = @keypath(str.lowercaseString.UTF8String);
+// => @"lowercaseString.UTF8String"
+
+NSString *versionPath = @keypath(NSObject, version);
+// => @"version"
+
+NSString *lowercaseStringPath = @keypath(NSString.new, lowercaseString);
+// => @"lowercaseString"
+```
+详细了解这些宏都做了什么，可以查看[这里](http://www.cnblogs.com/sunnyxx/p/3544703.html)。
+
+
+## 总结
+
+到这里该结束了，写了非常非常多，还有很多东西都没写。ReactiveCocoa 这个框架实在太厉害，上面有好几个点都不在一开始计划中，但是因为觉得写的很好，而且细节略过去对于理解它是一件坏事，所以浩浩荡荡写了很多。
+
+每个框架的学习都将带给你新的知识，很多时候不光要去了解他们是怎么实现的，还要去思考为什么这样做。至少在 ReactiveCocoa 中，值得学习的地方很多。很多地方都使用到了 `NSAssert`、`NSCAssert` 等宏保证了代码的安全，也减少了很多不必要的麻烦。
+
+ReactiveCocoa 还有很多东西，后续不会再有分析了，但是依然会继续研究。有一点需要提醒，RAC 是开源的，在 github 就可以[查看](https://github.com/ReactiveCocoa/ReactiveCocoa)，最重要的是广大程序员在这里提交的 [issue](https://github.com/ReactiveCocoa/ReactiveCocoa/issues) 和 [pull request](https://github.com/ReactiveCocoa/ReactiveCocoa/pulls)，都是比较有用的，也可以看看别人是如何发现这些问题，是如何处理的。
+
+授人以鱼不如授人以渔，在学习的时候，我一直坚持学习学习方法，提高自己发现问题和解决问题的能力，这点是非常重要的，没有人 24 小时做你的问题解决机，大部分问题还是要自己解决的。
+
+共勉。
